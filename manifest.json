@@ -1,0 +1,46 @@
+{
+    "manifest_version": 3,
+    "name": "My Extension",
+    "version": "1.0",
+    "description": "Real-time privacy protection using Gemini Nano",
+
+    "permissions": [
+        "storage",
+        "activeTab",
+        "scripting"
+    ],
+
+    "action": {
+        "default_popup": "popup.html",
+        "default_icon": "icon.png"
+    },
+
+    "content_scripts": [
+        {
+        "matches": ["<all_urls>"],
+        "js": ["content.js"],
+        "type": "module"
+        }
+    ],
+
+    "background": {
+        "service_worker": "background.js"
+    },
+
+    "options_page": "options.html",
+
+    "host_permissions": ["<all_urls>"],
+
+    "commands": {
+        "toggle-masking": {
+        "suggested_key": {
+            "default": "Ctrl+Shift+P",
+            "mac": "Command+Shift+P"
+            },
+        "description": "Toggle masking on/off"
+        }
+    },
+
+    "trial_tokens": ["YOUR_ORIGIN_TRIAL_TOKEN_HERE"]
+
+}
