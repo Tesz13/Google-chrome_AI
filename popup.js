@@ -57,38 +57,56 @@ async function updateStatus() {
       return;
     }
     
-    // Send message to content script to get current status
-    const response = await chrome.tabs.sendMessage(tab.id, { 
-      type: 'get_status' 
-    }).catch(() => null);
-    
-    if (response) {
-      updatePIICount(response.maskedCount || 0);
-      
+    // Check if URL is restricted
+    if (tab.url && (
+      tab.url.startsWith('chrome://') || 
+      tab.url.startsWith('chrome-extension://') ||
+      tab.url.startsWith('edge://') ||
+      tab.url.startsWith('about:')
+    )) {
       const statusElement = document.getElementById('status');
       if (statusElement) {
-        if (response.initialized && response.enabled) {
-          statusElement.textContent = 'Active';
-          statusElement.className = 'status active';
-        } else if (response.initialized && !response.enabled) {
-          statusElement.textContent = 'Disabled';
-          statusElement.className = 'status disabled';
-        } else {
-          statusElement.textContent = 'Initializing...';
-          statusElement.className = 'status initializing';
-        }
-      }
-    } else {
-      // Content script might not be loaded yet
-      const statusElement = document.getElementById('status');
-      if (statusElement) {
-        statusElement.textContent = 'Not loaded';
+        statusElement.textContent = 'Restricted Page';
         statusElement.className = 'status error';
       }
+      updatePIICount(0);
+      return;
+    }
+    
+    // Send message to content script to get current status
+    try {
+      const response = await chrome.tabs.sendMessage(tab.id, { 
+        type: 'get_status' 
+      });
+      
+      if (response) {
+        updatePIICount(response.maskedCount || 0);
+        
+        const statusElement = document.getElementById('status');
+        if (statusElement) {
+          if (response.initialized && response.enabled) {
+            statusElement.textContent = 'Active';
+            statusElement.className = 'status active';
+          } else if (response.initialized && !response.enabled) {
+            statusElement.textContent = 'Disabled';
+            statusElement.className = 'status disabled';
+          } else {
+            statusElement.textContent = 'Initializing...';
+            statusElement.className = 'status initializing';
+          }
+        }
+      }
+    } catch (error) {
+      // Content script not loaded on this page
+      const statusElement = document.getElementById('status');
+      if (statusElement) {
+        statusElement.textContent = 'Not Available';
+        statusElement.className = 'status error';
+      }
+      updatePIICount(0);
     }
   } catch (error) {
     console.error('Error updating status:', error);
-    showError('Failed to connect to page');
   }
 }
 
@@ -135,17 +153,21 @@ function setupEventListeners() {
         // Send to content script
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (tab && tab.id) {
-          await chrome.tabs.sendMessage(tab.id, {
-            type: 'toggle',
-            enabled: enabled
-          });
-          
-          // Update status after toggle
-          setTimeout(updateStatus, 500);
+          try {
+            await chrome.tabs.sendMessage(tab.id, {
+              type: 'toggle',
+              enabled: enabled
+            });
+            
+            // Update status after toggle
+            setTimeout(updateStatus, 500);
+          } catch (error) {
+            // Content script not available on this page
+            console.log('Content script not available');
+          }
         }
       } catch (error) {
         console.error('Error toggling extension:', error);
-        showError('Failed to toggle extension');
         // Revert toggle on error
         e.target.checked = !enabled;
       }
@@ -174,20 +196,24 @@ function setupEventListeners() {
         // Send to content script
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (tab && tab.id) {
-          await chrome.tabs.sendMessage(tab.id, {
-            type: 'filter_change',
-            piiType: type,
-            enabled: enabled
-          });
-          
-          // Trigger rescan after filter change
-          await chrome.tabs.sendMessage(tab.id, {
-            type: 'rescan'
-          });
+          try {
+            await chrome.tabs.sendMessage(tab.id, {
+              type: 'filter_change',
+              piiType: type,
+              enabled: enabled
+            });
+            
+            // Trigger rescan after filter change
+            await chrome.tabs.sendMessage(tab.id, {
+              type: 'rescan'
+            });
+          } catch (error) {
+            // Content script not available
+            console.log('Content script not available');
+          }
         }
       } catch (error) {
         console.error('Error updating filter:', error);
-        showError('Failed to update filter');
         // Revert checkbox on error
         e.target.checked = !enabled;
       }
@@ -204,22 +230,27 @@ function setupEventListeners() {
       try {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (tab && tab.id) {
-          await chrome.tabs.sendMessage(tab.id, {
-            type: 'rescan'
-          });
-          
-          // Wait a bit then update status
-          setTimeout(async () => {
-            await updateStatus();
+          try {
+            await chrome.tabs.sendMessage(tab.id, {
+              type: 'rescan'
+            });
+            
+            // Wait a bit then update status
+            setTimeout(async () => {
+              await updateStatus();
+              rescanButton.disabled = false;
+              rescanButton.textContent = '🔄 Rescan Page';
+            }, 1000);
+          } catch (error) {
+            console.log('Content script not available');
             rescanButton.disabled = false;
-            rescanButton.textContent = 'Rescan Page';
-          }, 1000);
+            rescanButton.textContent = '🔄 Rescan Page';
+          }
         }
       } catch (error) {
         console.error('Error rescanning:', error);
-        showError('Failed to rescan page');
         rescanButton.disabled = false;
-        rescanButton.textContent = 'Rescan Page';
+        rescanButton.textContent = '🔄 Rescan Page';
       }
     });
   }
