@@ -1,0 +1,61 @@
+/* ScreenGuard AI - Blur Overlay Styles */
+
+.screenguard-overlay {
+  background: rgba(100, 100, 100, 0.8);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: 3px;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Different colors for different PII types */
+.screenguard-overlay[data-pii-type="email"] {
+  background: rgba(76, 175, 80, 0.3);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.screenguard-overlay[data-pii-type="phone"] {
+  background: rgba(33, 150, 243, 0.3);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.screenguard-overlay[data-pii-type="ssn"] {
+  background: rgba(244, 67, 54, 0.4);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.screenguard-overlay[data-pii-type="credit_card"] {
+  background: rgba(255, 152, 0, 0.4);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.screenguard-overlay[data-pii-type="address"] {
+  background: rgba(156, 39, 176, 0.3);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.screenguard-overlay[data-pii-type="password"] {
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+}
+
+.screenguard-overlay[data-pii-type="api_key"] {
+  background: rgba(255, 193, 7, 0.4);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Hover effect - reduce blur slightly to peek */
+.screenguard-overlay:hover {
+  opacity: 0.7;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
