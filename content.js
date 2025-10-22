@@ -404,15 +404,23 @@ function startObserver() {
   console.log('👀 MutationObserver started');
 }
 
-// Handle scroll and resize
+// Handle scroll and resize with better performance
 let scrollTimeout;
+let isScrolling = false;
+
 window.addEventListener('scroll', () => {
-  if (scrollTimeout) clearTimeout(scrollTimeout);
-  scrollTimeout = setTimeout(updateOverlayPositions, 100);
+  if (!isScrolling) {
+    isScrolling = true;
+    // Use requestAnimationFrame for smoother updates
+    requestAnimationFrame(() => {
+      updateOverlayPositions();
+      isScrolling = false;
+    });
+  }
 }, true);
 
 window.addEventListener('resize', () => {
-  updateOverlayPositions();
+  requestAnimationFrame(updateOverlayPositions);
 });
 
 // Update badge count
