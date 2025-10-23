@@ -5,9 +5,10 @@
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   border-radius: 3px;
-  transition: opacity 0.2s ease;
   pointer-events: none;
   user-select: none;
+  will-change: transform;
+  transition: opacity 0.2s ease;
 }
 
 /* Different colors for different PII types */
