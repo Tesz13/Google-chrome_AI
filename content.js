@@ -44,7 +44,7 @@ Context awareness:
 If no PII found: {"pii_found": []}`
         });
         
-        console.log("✅ AI Language Model initialized");
+        console.log("✅ AI Language Model initialized (text)");
         this.useRegexFallback = false;
         this.isInitialized = true;
       } else {
@@ -141,7 +141,7 @@ If no PII found: {"pii_found": []}`
 let detector;
 let isEnabled = true;
 let processedNodes = new WeakSet();
-let maskedElements = new Map(); // Map of text nodes to their overlay elements
+let maskedElements = new Map(); // Map of nodes/elements -> overlay elements[]
 let observer = null;
 let isInitialized = false;
 let enabledFilters = {
@@ -152,6 +152,25 @@ let enabledFilters = {
   address: true,
   password: true,
   api_key: true
+};
+
+// ---- Image moderation state (NEW) ----
+let imageModerationEnabled = true;
+// AI session for image classification (separate from text model)
+let sgAiSession = null;
+// Cache: image hash -> verdict
+const imageVerdictCache = new Map();
+
+// Privacy Score tracking
+let privacyScore = 100;
+let piiCounts = {
+  email: 0,
+  phone: 0,
+  ssn: 0,
+  credit_card: 0,
+  address: 0,
+  password: 0,
+  api_key: 0
 };
 
 console.log('🛡️ ScreenGuard content script loading...');
@@ -172,18 +191,18 @@ async function initDetector() {
   }
 }
 
-// Scan entire page for PII
+// Scan entire page for PII (text + images)
 async function scanPage() {
   if (!isEnabled || !isInitialized) return;
   
-  console.log('🔍 Scanning page for PII...');
+  console.log('🔍 Scanning page for PII (text + images)...');
   
-  // Clear existing masks
+  // Clear existing masks and reset counts
   clearAllMasks();
+  resetPrivacyScore();
   
-  // Get all text nodes
+  // -- TEXT SCAN --
   const textNodes = getTextNodes(document.body);
-  
   let totalFound = 0;
   
   for (const node of textNodes) {
@@ -192,23 +211,30 @@ async function scanPage() {
     const text = node.textContent;
     if (!text || text.trim().length < 5) continue;
     
-    // Detect PII in this text node
     const piiItems = await detector.detectPII(text);
-    
     if (piiItems.length > 0) {
-      // Filter by enabled types
       const filteredItems = piiItems.filter(item => enabledFilters[item.type]);
-      
       if (filteredItems.length > 0) {
         maskTextNode(node, filteredItems);
         totalFound += filteredItems.length;
+        filteredItems.forEach(item => {
+          if (piiCounts.hasOwnProperty(item.type)) {
+            piiCounts[item.type]++;
+          }
+        });
       }
     }
-    
     processedNodes.add(node);
   }
+
+  // -- IMAGE SCAN (NEW) --
+  scanImages(document);
+
+  console.log(`✅ Found and masked ${totalFound} text PII items`);
   
-  console.log(`✅ Found and masked ${totalFound} PII items`);
+  // Calculate and update privacy score
+  calculatePrivacyScore();
+  updatePrivacyBadge();
   updateBadge(totalFound);
 }
 
@@ -220,7 +246,6 @@ function getTextNodes(element) {
     NodeFilter.SHOW_TEXT,
     {
       acceptNode: (node) => {
-        // Skip script, style, and already processed nodes
         const parent = node.parentElement;
         if (!parent) return NodeFilter.FILTER_REJECT;
         
@@ -228,17 +253,12 @@ function getTextNodes(element) {
         if (['script', 'style', 'noscript', 'iframe'].includes(tagName)) {
           return NodeFilter.FILTER_REJECT;
         }
-        
-        // Skip our own overlay elements
         if (parent.classList.contains('screenguard-overlay')) {
           return NodeFilter.FILTER_REJECT;
         }
-        
-        // Only accept nodes with meaningful text
         if (node.textContent.trim().length < 5) {
           return NodeFilter.FILTER_REJECT;
         }
-        
         return NodeFilter.FILTER_ACCEPT;
       }
     }
@@ -248,7 +268,6 @@ function getTextNodes(element) {
   while (node = walker.nextNode()) {
     textNodes.push(node);
   }
-  
   return textNodes;
 }
 
@@ -258,29 +277,21 @@ function maskTextNode(textNode, piiItems) {
   const parent = textNode.parentElement;
   if (!parent) return;
   
-  // For each PII item, create a blur overlay
   for (const pii of piiItems) {
     try {
-      // Find the position of this PII in the text
       const index = text.indexOf(pii.value);
       if (index === -1) continue;
       
-      // Create a range for this specific PII
       const range = document.createRange();
       range.setStart(textNode, index);
       range.setEnd(textNode, index + pii.value.length);
       
-      // Get the bounding rectangles
       const rects = range.getClientRects();
-      
-      // Create overlay for each rect (handles line wrapping)
       for (const rect of rects) {
         if (rect.width === 0 || rect.height === 0) continue;
-        
         const overlay = createOverlay(rect, pii.type);
         document.body.appendChild(overlay);
-        
-        // Store reference
+
         if (!maskedElements.has(textNode)) {
           maskedElements.set(textNode, []);
         }
@@ -292,13 +303,12 @@ function maskTextNode(textNode, piiItems) {
   }
 }
 
-// Create blur overlay element
+// Create blur overlay element (used for both text + image masks)
 function createOverlay(rect, piiType) {
   const overlay = document.createElement('div');
   overlay.className = 'screenguard-overlay';
   overlay.dataset.piiType = piiType;
-  
-  // Position absolutely at the exact location of the text
+
   overlay.style.position = 'fixed';
   overlay.style.left = rect.left + 'px';
   overlay.style.top = rect.top + 'px';
@@ -306,7 +316,11 @@ function createOverlay(rect, piiType) {
   overlay.style.height = rect.height + 'px';
   overlay.style.zIndex = '999999';
   overlay.style.pointerEvents = 'none';
-  
+  // Visuals (also add CSS rule in content.css)
+  // overlay.style.backdropFilter = 'blur(14px)';
+  // overlay.style.background = 'rgba(0,0,0,0.25)';
+  // overlay.style.borderRadius = '4px';
+
   return overlay;
 }
 
@@ -321,42 +335,44 @@ function clearAllMasks() {
   });
   maskedElements.clear();
   processedNodes = new WeakSet();
+  
+  const existingBadge = document.getElementById('screenguard-privacy-badge');
+  if (existingBadge) existingBadge.remove();
 }
 
-// Update position of all overlays (for scroll/resize)
+// Update overlay positions (supports text nodes AND elements)
 function updateOverlayPositions() {
-  maskedElements.forEach((overlays, textNode) => {
-    // Check if text node still exists in DOM
-    if (!document.contains(textNode)) {
-      // Remove overlays for deleted nodes
-      overlays.forEach(overlay => {
-        if (overlay && overlay.parentNode) {
-          overlay.parentNode.removeChild(overlay);
-        }
-      });
-      maskedElements.delete(textNode);
+  maskedElements.forEach((overlays, node) => {
+    // If node gone, remove overlays
+    if (node.nodeType === 1 && !document.contains(node)) {
+      overlays.forEach(o => o?.parentNode?.removeChild(o));
+      maskedElements.delete(node);
       return;
     }
-    
-    // Update positions
-    const text = textNode.textContent;
-    let overlayIndex = 0;
-    
-    // This is simplified - in production you'd track exact PII positions
-    overlays.forEach(overlay => {
-      try {
+    if (node.nodeType === 3 && !document.contains(node.parentElement)) {
+      overlays.forEach(o => o?.parentNode?.removeChild(o));
+      maskedElements.delete(node);
+      return;
+    }
+
+    try {
+      let rect;
+      if (node.nodeType === 3) {
         const range = document.createRange();
-        range.selectNodeContents(textNode);
-        const rect = range.getBoundingClientRect();
-        
-        if (rect.width > 0 && rect.height > 0) {
+        range.selectNodeContents(node);
+        rect = range.getBoundingClientRect();
+      } else {
+        rect = node.getBoundingClientRect();
+      }
+      if (rect && rect.width > 0 && rect.height > 0) {
+        overlays.forEach(overlay => {
           overlay.style.left = rect.left + 'px';
           overlay.style.top = rect.top + 'px';
-        }
-      } catch (error) {
-        // Node might be removed
+          overlay.style.width = rect.width + 'px';
+          overlay.style.height = rect.height + 'px';
+        });
       }
-    });
+    } catch {}
   });
 }
 
@@ -368,26 +384,19 @@ function startObserver() {
     let shouldRescan = false;
     
     for (const mutation of mutations) {
-      // Check if significant content was added
       if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
         for (const node of mutation.addedNodes) {
-          // Skip our own overlays
-          if (node.classList && node.classList.contains('screenguard-overlay')) {
-            continue;
-          }
+          if (node.classList && node.classList.contains('screenguard-overlay')) continue;
           shouldRescan = true;
           break;
         }
       }
-      
-      // Check for text changes
       if (mutation.type === 'characterData') {
         shouldRescan = true;
       }
     }
     
     if (shouldRescan) {
-      // Debounce rescan
       if (window.rescanTimeout) clearTimeout(window.rescanTimeout);
       window.rescanTimeout = setTimeout(() => {
         scanPage();
@@ -404,14 +413,11 @@ function startObserver() {
   console.log('👀 MutationObserver started');
 }
 
-// Handle scroll and resize with better performance
-let scrollTimeout;
+// Handle scroll and resize
 let isScrolling = false;
-
 window.addEventListener('scroll', () => {
   if (!isScrolling) {
     isScrolling = true;
-    // Use requestAnimationFrame for smoother updates
     requestAnimationFrame(() => {
       updateOverlayPositions();
       isScrolling = false;
@@ -428,11 +434,84 @@ function updateBadge(count) {
   try {
     chrome.runtime.sendMessage({
       type: 'pii_detected',
-      count: count
+      count: count,
+      privacyScore: privacyScore,
+      piiCounts: piiCounts
     });
   } catch (error) {
     // Ignore if background script isn't ready
   }
+}
+
+// ========== PRIVACY SCORE SYSTEM ==========
+
+function resetPrivacyScore() {
+  privacyScore = 100;
+  piiCounts = {
+    email: 0,
+    phone: 0,
+    ssn: 0,
+    credit_card: 0,
+    address: 0,
+    password: 0,
+    api_key: 0
+  };
+}
+
+function calculatePrivacyScore() {
+  let score = 100;
+  const weights = {
+    password: 25,
+    ssn: 20,
+    credit_card: 20,
+    api_key: 15,
+    email: 10,
+    phone: 8,
+    address: 10
+  };
+  for (const [type, count] of Object.entries(piiCounts)) {
+    if (count > 0 && weights[type]) {
+      score -= weights[type];
+      if (count > 1) {
+        score -= Math.min((count - 1) * (weights[type] * 0.3), weights[type]);
+      }
+    }
+  }
+  privacyScore = Math.max(0, Math.min(100, Math.round(score)));
+  console.log(`🔒 Privacy Score: ${privacyScore}/100`);
+  return privacyScore;
+}
+
+function getScoreColor() {
+  if (privacyScore >= 80) return { bg: '#2c5aa0', text: 'navy', label: 'SAFE' };
+  if (privacyScore >= 50) return { bg: '#1e3a5f', text: 'dark-navy', label: 'MODERATE' };
+  return { bg: '#4A4B2F', text: 'olive', label: 'HIGH RISK' };
+}
+
+function updatePrivacyBadge() {
+  if (!isEnabled) return;
+  const existingBadge = document.getElementById('screenguard-privacy-badge');
+  if (existingBadge) existingBadge.remove();
+  
+  const badge = document.createElement('div');
+  badge.id = 'screenguard-privacy-badge';
+  badge.className = 'screenguard-privacy-badge';
+  
+  const scoreData = getScoreColor();
+  const totalPII = Object.values(piiCounts).reduce((sum, count) => sum + count, 0);
+  
+  badge.innerHTML = `
+    <div class="score-circle" style="background: ${scoreData.bg}">
+      <div class="score-number">${privacyScore}</div>
+      <div class="score-max">/100</div>
+    </div>
+    <div class="score-details">
+      <div class="score-label" style="color: ${scoreData.bg}">${scoreData.label}</div>
+      <div class="score-info">${totalPII} PII item${totalPII !== 1 ? 's' : ''} detected</div>
+    </div>
+  `;
+  document.body.appendChild(badge);
+  badge.addEventListener('click', () => showPrivacyDetails());
 }
 
 // Listen for messages from popup/background
@@ -443,7 +522,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     sendResponse({ 
       enabled: isEnabled, 
       initialized: isInitialized,
-      maskedCount: Array.from(maskedElements.values()).reduce((sum, arr) => sum + arr.length, 0)
+      maskedCount: Array.from(maskedElements.values()).reduce((sum, arr) => sum + arr.length, 0),
+      privacyScore: privacyScore,
+      piiCounts: piiCounts
     });
   } else if (request.type === 'toggle') {
     isEnabled = request.enabled;
@@ -454,30 +535,27 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
     sendResponse({ success: true });
   } else if (request.type === 'rescan') {
-    scanPage().then(() => {
-      sendResponse({ success: true });
-    });
-    return true; // Async response
+    scanPage().then(() => sendResponse({ success: true }));
+    return true;
   } else if (request.type === 'filter_change') {
     enabledFilters[request.piiType] = request.enabled;
     sendResponse({ success: true });
   }
-  
   return true;
 });
 
 // Load settings and initialize
 async function loadSettings() {
   try {
-    const result = await chrome.storage.sync.get(['enabled', 'filters']);
-    
+    const result = await chrome.storage.sync.get(['enabled', 'filters', 'imageModeration']);
     if (result.enabled !== undefined) {
       isEnabled = result.enabled;
     }
-    
     if (result.filters) {
       enabledFilters = { ...enabledFilters, ...result.filters };
     }
+    // Default ON if not set
+    imageModerationEnabled = result.imageModeration !== false;
   } catch (error) {
     console.error('Error loading settings:', error);
   }
@@ -488,4 +566,166 @@ loadSettings().then(() => {
   initDetector();
 });
 
-console.log('✅ ScreenGuard content script loaded');
+console.log('✅ Cipher content script loaded');
+
+function showPrivacyDetails() {
+  const details = [];
+  for (const [type, count] of Object.entries(piiCounts)) {
+    if (count > 0) {
+      const emoji = {
+        email: '📧',
+        phone: '📱',
+        ssn: '🔢',
+        credit_card: '💳',
+        address: '📍',
+        password: '🔒',
+        api_key: '🔑'
+      }[type] || '•';
+      details.push(`${emoji} ${count} ${type.replace('_', ' ')}`);
+    }
+  }
+  const scoreData = getScoreColor();
+  const message = details.length > 0 
+    ? `Privacy Score: ${privacyScore}/100 (${scoreData.label})\n\n${details.join('\n')}`
+    : 'No PII detected on this page';
+  alert(message);
+}
+
+// =================== IMAGE MODERATION (NEW) ===================
+
+// Ensure Prompt API session for images
+async function ensureImageAiSession() {
+  if (!window.ai?.assistant?.create) return null;
+  if (!sgAiSession) sgAiSession = await window.ai.assistant.create();
+  return sgAiSession;
+}
+
+// Fetch remote image as Blob
+async function fetchImageBlob(url) {
+  try {
+    const res = await fetch(url, { mode: 'cors', cache: 'force-cache' });
+    if (!res.ok) throw new Error(res.statusText);
+    return await res.blob();
+  } catch {
+    return null;
+  }
+}
+
+// SHA-1 hash for caching
+async function sha1Blob(blob) {
+  const buf = await blob.arrayBuffer();
+  const hash = await crypto.subtle.digest('SHA-1', buf);
+  return [...new Uint8Array(hash)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Prompt API image classifier
+async function classifyImageWithAI(blob) {
+  const session = await ensureImageAiSession();
+  if (!session) return { unsafe: null, categories: [], confidence: 0, reason: 'no_ai' };
+
+  const prompt = [
+    { text: "You are a safety classifier. Determine if this image is unsafe for minors (ads, popups, thumbnails)." },
+    { text: "Return STRICT JSON: {\"unsafe\": true|false, \"categories\": [\"adult_nudity\",\"explicit\",\"suggestive\",\"violence\",\"graphic\",\"none\"], \"confidence\": 0..1}" },
+    { image: blob }
+  ];
+  try {
+    const res = await session.prompt(prompt);
+    return JSON.parse(res.trim());
+  } catch (e) {
+    console.warn('Image AI parse error', e);
+    return { unsafe: null, categories: [], confidence: 0, reason: 'parse_error' };
+  }
+}
+
+function extractCssUrl(bg) {
+  const m = bg && bg.match(/url\(["']?(.*?)["']?\)/);
+  return m ? m[1] : null;
+}
+
+function elementIsVisible(el) {
+  const r = el.getBoundingClientRect();
+  return r.width > 40 && r.height > 40 && r.bottom > 0 && r.right > 0;
+}
+
+async function processImgElement(imgEl) {
+  if (!imageModerationEnabled) return;
+  if (!imgEl || imgEl.dataset.sgProcessedImg) return;
+  if (!elementIsVisible(imgEl)) return;
+  imgEl.dataset.sgProcessedImg = '1';
+
+  const url = imgEl.currentSrc || imgEl.src;
+  if (!url) return;
+
+  try {
+    const u = new URL(url, location.href);
+    const fname = (u.pathname || '').toLowerCase();
+    if (fname.endsWith('.svg') || fname.endsWith('.ico')) return;
+  } catch {}
+
+  const blob = await fetchImageBlob(url);
+  if (!blob) return;
+  if ((blob.size || 0) < 1500) return; // tiny assets: skip
+
+  const key = await sha1Blob(blob);
+  let verdict = imageVerdictCache.get(key);
+  if (!verdict) {
+    verdict = await classifyImageWithAI(blob);
+    imageVerdictCache.set(key, verdict);
+  }
+  if (verdict.unsafe === true && verdict.confidence >= 0.80) {
+    maskImageElement(imgEl, verdict.categories);
+  }
+}
+
+async function processBackgroundImage(el) {
+  if (!imageModerationEnabled) return;
+  if (!el || el.dataset.sgProcessedBg) return;
+
+  const bg = getComputedStyle(el).backgroundImage;
+  const url = extractCssUrl(bg);
+  if (!url) return;
+
+  el.dataset.sgProcessedBg = '1';
+  if (!elementIsVisible(el)) return;
+
+  const blob = await fetchImageBlob(url);
+  if (!blob) return;
+  if ((blob.size || 0) < 1500) return;
+
+  const key = await sha1Blob(blob);
+  let verdict = imageVerdictCache.get(key);
+  if (!verdict) {
+    verdict = await classifyImageWithAI(blob);
+    imageVerdictCache.set(key, verdict);
+  }
+  if (verdict.unsafe === true && verdict.confidence >= 0.80) {
+    maskImageElement(el, verdict.categories, /*isBg*/ true);
+  }
+}
+
+function scanImages(root = document) {
+  if (!imageModerationEnabled) return;
+
+  // <img> tags
+  [...root.querySelectorAll('img')].forEach(processImgElement);
+
+  // CSS backgrounds
+  [...root.querySelectorAll('*')].forEach(processBackgroundImage);
+}
+
+function maskImageElement(el, categories = [], isBg = false) {
+  try {
+    const rect = el.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+
+    const overlay = createOverlay(rect, 'image');
+    overlay.dataset.sgKind = 'image';
+    overlay.title = categories.length ? `Blurred: ${categories.filter(c => c !== 'none').join(', ')}` : 'Blurred: Sensitive image';
+    document.body.appendChild(overlay);
+
+    if (!maskedElements.has(el)) maskedElements.set(el, []);
+    maskedElements.get(el).push(overlay);
+  } catch (e) {
+    console.warn('maskImageElement error', e);
+  }
+}

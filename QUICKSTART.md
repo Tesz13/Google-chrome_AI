@@ -1,4 +1,4 @@
-# 🚀 ScreenGuard AI - Quick Start Guide
+# 🚀 Cipher - Quick Start Guide
 
 Get up and running in 5 minutes!
 
@@ -147,7 +147,7 @@ Then convert to PNG using any online SVG→PNG converter.
 
 ### Blurs not appearing
 - Open DevTools Console
-- Look for ScreenGuard messages
+- Look for Cipher messages
 - Check if PII was detected: `console.log('Found X items')`
 - Try the demo.html page first
 
@@ -272,6 +272,6 @@ If you get stuck:
 
 ---
 
-**Good luck with your submission! 🚀🛡️**
+**Good luck with your submission! 🚀🔐**
 
 Remember: The judges are looking for creativity, functionality, and good use of the Prompt API. Focus on making something that genuinely solves a real problem!
