@@ -4,10 +4,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupEventListeners();
 });
 
+let initialSettings = {}; // Track initial state
+
 // Load saved settings
 async function loadSettings() {
   try {
-    const result = await chrome.storage.sync.get(['enabled', 'filters', 'useAI', 'autoScan']);
+    const result = await chrome.storage.sync.get([
+      'enabled', 'filters', 'useAI', 'autoScan', 'imageModeration'
+    ]);
     
     // Load filter checkboxes
     const filters = result.filters || {
@@ -23,22 +27,73 @@ async function loadSettings() {
     document.querySelectorAll('[data-type]').forEach(checkbox => {
       const type = checkbox.dataset.type;
       if (type && filters.hasOwnProperty(type)) {
-        checkbox.checked = filters[type];
+        checkbox.checked = !!filters[type];
       }
     });
     
-    // Load advanced settings
-    const useAI = result.useAI !== false; // Default true
-    const autoScan = result.autoScan !== false; // Default true
-    
+    // Advanced settings (defaults ON)
+    const useAI = result.useAI !== false;
+    const autoScan = result.autoScan !== false;
+    const imageModeration = result.imageModeration !== false;
+
     const useAICheckbox = document.getElementById('use-ai');
     if (useAICheckbox) useAICheckbox.checked = useAI;
-    
+
     const autoScanCheckbox = document.getElementById('auto-scan');
     if (autoScanCheckbox) autoScanCheckbox.checked = autoScan;
-    
+
+    const imgModCheckbox = document.getElementById('image-moderation');
+    if (imgModCheckbox) imgModCheckbox.checked = imageModeration;
+
+    // Store initial state for comparison
+    initialSettings = {
+      filters: {...filters},
+      useAI,
+      autoScan,
+      imageModeration
+    };
+
   } catch (error) {
     console.error('Error loading settings:', error);
+  }
+}
+
+// Check if settings have changed
+function hasChanges() {
+  const currentFilters = {};
+  document.querySelectorAll('[data-type]').forEach(checkbox => {
+    const type = checkbox.dataset.type;
+    if (type) currentFilters[type] = !!checkbox.checked;
+  });
+  
+  const currentUseAI = document.getElementById('use-ai')?.checked ?? true;
+  const currentAutoScan = document.getElementById('auto-scan')?.checked ?? true;
+  const currentImageModeration = document.getElementById('image-moderation')?.checked ?? true;
+
+  // Compare filters
+  for (const key in initialSettings.filters) {
+    if (initialSettings.filters[key] !== currentFilters[key]) return true;
+  }
+
+  // Compare advanced settings
+  if (initialSettings.useAI !== currentUseAI) return true;
+  if (initialSettings.autoScan !== currentAutoScan) return true;
+  if (initialSettings.imageModeration !== currentImageModeration) return true;
+
+  return false;
+}
+
+// Update save button state
+function updateSaveButton() {
+  const saveBtn = document.getElementById('save-btn');
+  if (!saveBtn) return;
+
+  if (hasChanges()) {
+    saveBtn.classList.add('has-changes');
+    saveBtn.textContent = 'Save Changes';
+  } else {
+    saveBtn.classList.remove('has-changes');
+    saveBtn.textContent = 'Save Settings';
   }
 }
 
@@ -49,21 +104,32 @@ async function saveSettings() {
     const filters = {};
     document.querySelectorAll('[data-type]').forEach(checkbox => {
       const type = checkbox.dataset.type;
-      if (type) {
-        filters[type] = checkbox.checked;
-      }
+      if (type) filters[type] = !!checkbox.checked;
     });
     
-    // Get advanced settings
+    // Advanced settings
     const useAI = document.getElementById('use-ai')?.checked ?? true;
     const autoScan = document.getElementById('auto-scan')?.checked ?? true;
-    
+    const imageModeration = document.getElementById('image-moderation')?.checked ?? true;
+
     // Save to storage
     await chrome.storage.sync.set({
       filters,
       useAI,
-      autoScan
+      autoScan,
+      imageModeration
     });
+    
+    // Update initial settings to current state
+    initialSettings = {
+      filters: {...filters},
+      useAI,
+      autoScan,
+      imageModeration
+    };
+
+    // Update button state
+    updateSaveButton();
     
     // Show success message
     showSuccessMessage();
@@ -72,11 +138,9 @@ async function saveSettings() {
     const tabs = await chrome.tabs.query({});
     for (const tab of tabs) {
       try {
-        await chrome.tabs.sendMessage(tab.id, {
-          type: 'settings_updated'
-        });
-      } catch (error) {
-        // Tab might not have content script loaded
+        await chrome.tabs.sendMessage(tab.id, { type: 'settings_updated' });
+      } catch {
+        // Tab might not have a content script (ignore)
       }
     }
     
@@ -88,9 +152,7 @@ async function saveSettings() {
 
 // Reset to default settings
 async function resetSettings() {
-  if (!confirm('Are you sure you want to reset all settings to defaults?')) {
-    return;
-  }
+  if (!confirm('Are you sure you want to reset all settings to defaults?')) return;
   
   try {
     const defaults = {
@@ -105,11 +167,11 @@ async function resetSettings() {
         api_key: true
       },
       useAI: true,
-      autoScan: true
+      autoScan: true,
+      imageModeration: true
     };
     
     await chrome.storage.sync.set(defaults);
-    
     // Reload the page to show default values
     window.location.reload();
     
@@ -124,11 +186,7 @@ function showSuccessMessage() {
   const message = document.getElementById('success-message');
   if (message) {
     message.style.display = 'block';
-    
-    // Hide after 3 seconds
-    setTimeout(() => {
-      message.style.display = 'none';
-    }, 3000);
+    setTimeout(() => { message.style.display = 'none'; }, 3000);
   }
 }
 
@@ -136,21 +194,14 @@ function showSuccessMessage() {
 function setupEventListeners() {
   // Save button
   const saveBtn = document.getElementById('save-btn');
-  if (saveBtn) {
-    saveBtn.addEventListener('click', saveSettings);
-  }
+  if (saveBtn) saveBtn.addEventListener('click', saveSettings);
   
   // Reset button
   const resetBtn = document.getElementById('reset-btn');
-  if (resetBtn) {
-    resetBtn.addEventListener('click', resetSettings);
-  }
+  if (resetBtn) resetBtn.addEventListener('click', resetSettings);
   
-  // Auto-save on checkbox change
+  // Listen for changes on all checkboxes
   document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
-    checkbox.addEventListener('change', () => {
-      // Optional: Auto-save on every change
-      // saveSettings();
-    });
+    checkbox.addEventListener('change', updateSaveButton);
   });
 }
