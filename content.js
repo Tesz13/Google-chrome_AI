@@ -9,12 +9,12 @@ class PiiDetector {
 
   async init() {
     try {
-      if (typeof ai === 'undefined' || !ai.languageModel) {
-        console.warn("AI Language Model API not available. Using regex fallback.");
-        this.useRegexFallback = true;
-        this.isInitialized = true;
-        return;
-      }
+      // if (typeof ai === 'undefined' || !ai.languageModel) {
+      //   console.warn("AI Language Model API not available. Using regex fallback.");
+      //   this.useRegexFallback = true;
+      //   this.isInitialized = true;
+      //   return;
+      // }
 
       const canCreate = await ai.languageModel.capabilities();
       

@@ -8,6 +8,24 @@
     "activeTab",
     "scripting"
   ],
+<<<<<<< Updated upstream
+=======
+  "host_permissions": ["<all_urls>"],
+
+  "web_accessible_resources": [{
+    "resources": ["page-bridge.js"],
+    "matches": ["<all_urls>"]
+  }],
+
+  "trial_tokens" : [
+        "A3Cjey2UYTPzBUJ+kw0z4RGOiddBZbKWyVBcP0hzdQfEgvs0Sf5EQTtzwbAywVKuj2Var8EARIpKJWt3dFgjPwoAAACPeyJvcmlnaW4iOiJjaHJvbWUtZXh0ZW5zaW9uOi8va2dkZ25hb2lubGxvbW5ka2thbGpkZmNrZWVlcGljb2YiLCJmZWF0dXJlIjoiQUlQcm9tcHRBUElNdWx0aW1vZGFsSW5wdXQiLCJleHBpcnkiOjE3NzQzMTA0MDAsImlzVGhpcmRQYXJ0eSI6dHJ1ZX0="
+  ],
+
+  "background": {
+    "service_worker": "background.js"
+  },
+
+>>>>>>> Stashed changes
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
