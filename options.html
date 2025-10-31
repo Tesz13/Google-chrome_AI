@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CIpher Settings</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+      background: #1a1f2e;
+      min-height: 100vh;
+      color: #e5e7eb;
+      padding: 40px 20px;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: #0f172a;
+      border-radius: 16px;
+      padding: 40px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+      border: 1px solid #1e293b;
+    }
+
+    h1 {
+      font-size: 36px;
+      margin-bottom: 10px;
+      text-align: center;
+      color: #f1f5f9;
+      letter-spacing: 1px;
+    }
+
+    .subtitle {
+      text-align: center;
+      color: #94a3b8;
+      margin-bottom: 40px;
+      font-size: 16px;
+    }
+
+    .section {
+      background: #1a1f2e;
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+      border: 1px solid #334155;
+    }
+
+    .section-title {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 20px;
+      padding-bottom: 12px;
+      border-bottom: 2px solid #334155;
+      color: #e2e8f0;
+    }
+
+    .setting-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px;
+      background: #0f172a;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      border: 1px solid #1e293b;
+    }
+
+    .setting-info {
+      flex: 1;
+    }
+
+    .setting-label {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 4px;
+      color: #e2e8f0;
+    }
+
+    .setting-description {
+      font-size: 13px;
+      color: #94a3b8;
+      line-height: 1.4;
+    }
+
+    .toggle {
+      position: relative;
+      width: 60px;
+      height: 32px;
+    }
+
+    .toggle input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #334155;
+      transition: 0.3s;
+      border-radius: 32px;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 24px;
+      width: 24px;
+      left: 4px;
+      bottom: 4px;
+      background-color: #64748b;
+      transition: 0.3s;
+      border-radius: 50%;
+    }
+
+    input:checked + .slider {
+      background-color: #475569;
+    }
+
+    input:checked + .slider:before {
+      transform: translateX(28px);
+      background-color: #94a3b8;
+    }
+
+    .filter-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+    }
+
+    .filter-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px;
+      background: #0f172a;
+      border-radius: 8px;
+      font-size: 14px;
+      border: 1px solid #1e293b;
+    }
+
+    .filter-item input[type="checkbox"] {
+      width: 20px;
+      height: 20px;
+      cursor: pointer;
+      accent-color: #475569;
+    }
+
+    .filter-item label {
+      cursor: pointer;
+      flex: 1;
+      color: #cbd5e1;
+    }
+
+    .save-btn {
+      background: #475569;
+      border: 2px solid #64748b;
+      color: #e2e8f0;
+      padding: 14px 32px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 700;
+      width: 100%;
+      margin-top: 24px;
+      transition: all 0.3s;
+    }
+
+    .save-btn:hover {
+      background: #64748b;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    }
+
+    .save-btn:active {
+      transform: translateY(0);
+    }
+
+    .success-message {
+      background: #1e293b;
+      border: 1px solid #475569;
+      padding: 12px;
+      border-radius: 8px;
+      text-align: center;
+      margin-top: 16px;
+      display: none;
+      color: #86efac;
+    }
+
+    .success-message.show {
+      display: block;
+      animation: fadeIn 0.3s;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .info-box {
+      background: #1e293b;
+      border-left: 4px solid #475569;
+      padding: 16px;
+      border-radius: 8px;
+      margin-top: 20px;
+      font-size: 14px;
+      line-height: 1.6;
+      color: #cbd5e1;
+    }
+
+    .warning-box {
+      background: #1e293b;
+      border-left: 4px solid #fbbf24;
+      padding: 16px;
+      border-radius: 8px;
+      margin-top: 20px;
+      font-size: 14px;
+      line-height: 1.6;
+      color: #fde68a;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>CIpher Settings</h1>
+    <p class="subtitle">Configure your privacy and safety protection preferences</p>
+
+    <!-- General Settings -->
+    <div class="section">
+      <h2 class="section-title">🔒 General Protection</h2>
+      
+      <div class="setting-item">
+        <div class="setting-info">
+          <div class="setting-label">Enable Protection</div>
+          <div class="setting-description">Master switch for all  CIpher features</div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="enable-protection" checked>
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="setting-item">
+        <div class="setting-info">
+          <div class="setting-label">Image Content Moderation</div>
+          <div class="setting-description">Detect and blur inappropriate images (violence, nudity, sexual content, disturbing content)</div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="image-moderation" checked>
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="setting-item">
+        <div class="setting-info">
+          <div class="setting-label">Data Tracking Analysis</div>
+          <div class="setting-description">Analyze websites for data collection and tracking practices</div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="tracking-analysis" checked>
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="setting-item">
+        <div class="setting-info">
+          <div class="setting-label">Use AI Detection</div>
+          <div class="setting-description">Use Chrome's Prompt API for enhanced PII detection (requires Gemini Nano)</div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="use-ai" checked>
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="setting-item">
+        <div class="setting-info">
+          <div class="setting-label">Auto Scan</div>
+          <div class="setting-description">Automatically scan pages when they load</div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="auto-scan" checked>
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <!-- PII Detection Filters -->
+    <div class="section">
+      <h2 class="section-title">📊 Personal Data Detection</h2>
+      <p class="setting-description" style="margin-bottom: 16px; color: #94a3b8;">
+        Select which types of personal information should be detected and blurred
+      </p>
+      
+      <div class="filter-grid">
+        <div class="filter-item">
+          <input type="checkbox" id="filter-email" data-type="email" checked>
+          <label for="filter-email">📧 Email Addresses</label>
+        </div>
+        <div class="filter-item">
+          <input type="checkbox" id="filter-phone" data-type="phone" checked>
+          <label for="filter-phone">📱 Phone Numbers</label>
+        </div>
+        <div class="filter-item">
+          <input type="checkbox" id="filter-ssn" data-type="ssn" checked>
+          <label for="filter-ssn">🔢 Social Security Numbers</label>
+        </div>
+        <div class="filter-item">
+          <input type="checkbox" id="filter-credit_card" data-type="credit_card" checked>
+          <label for="filter-credit_card">💳 Credit Card Numbers</label>
+        </div>
+        <div class="filter-item">
+          <input type="checkbox" id="filter-address" data-type="address" checked>
+          <label for="filter-address">📍 Physical Addresses</label>
+        </div>
+        <div class="filter-item">
+          <input type="checkbox" id="filter-password" data-type="password" checked>
+          <label for="filter-password">🔑 Passwords</label>
+        </div>
+        <div class="filter-item">
+          <input type="checkbox" id="filter-api_key" data-type="api_key" checked>
+          <label for="filter-api_key">🔐 API Keys & Tokens</label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Information Boxes -->
+    <div class="info-box">
+      ℹ️ <strong>About CIpher:</strong> This extension uses advanced AI (Chrome's Prompt API) to detect personal information, analyze image content for safety, and identify data tracking practices. All processing happens locally in your browser for maximum privacy.
+    </div>
+
+    <div class="warning-box">
+      ⚠️ <strong>Note:</strong> While CIpher provides excellent protection, no automated system is 100% accurate. Always exercise caution when sharing personal information online.
+    </div>
+
+    <!-- Save Button -->
+    <button class="save-btn" id="save-btn">💾 Save Settings</button>
+    <div class="success-message" id="success-message">
+      ✅ Settings saved successfully!
+    </div>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>
