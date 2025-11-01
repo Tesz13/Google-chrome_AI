@@ -57,7 +57,7 @@ class PiiDetector {
             - password: Visible passwords 
             - api_key: API keys, tokens, secrets 
             
-            DO NOT flag: headers, titles, company names, generic emails, business info, UI labels, navigation text 
+            DO NOT flag: headers, titles, company names, generic emails, business info, UI labels, navigation text, or keywords 
             DO NOT MAKE ANYTHING UP.
             `;
 
@@ -110,13 +110,13 @@ class PiiDetector {
         };
         
         try {
-            // console.log("Text: ", text);
+            console.log("Text: ", text);
             const resultText = await this.session.prompt(`TEXT TO ANALYZE:\n${text}`,
             { responseConstraint: piiSchema, omitResponseConstraintInput: true }
             );
             // console.log(resultText);
             const parsed = JSON.parse(resultText);
-
+            console.log("Parsed json:", parsed)
             return Array.isArray(parsed.pii_found)
             ? parsed.pii_found
             : [];
@@ -125,8 +125,6 @@ class PiiDetector {
             return this.regexFallback(text);
         }
     }
-
-
 
     regexFallback(text) {
         return Object.entries(this.patterns).flatMap(([type, regex]) => 
@@ -219,6 +217,107 @@ function getScoreColor() {
     if (state.privacyScore >= 50) return { bg: '#1e3a5f', label: 'MODERATE' };
     return { bg: '#4A4B2F', label: 'HIGH RISK' };
 }
+
+
+// ===== Masking (offset-accurate + scroll/resize safe) =====
+
+// store findings per element so we can re-render on scroll/resize
+// const findingsMap = new WeakMap(); // el -> [{type,value,start,end},...]
+
+// function createOverlay(rect, piiType) {
+//   const overlay = document.createElement('div');
+//   overlay.className = 'screenguard-overlay';
+//   overlay.dataset.piiType = piiType;
+
+//   Object.assign(overlay.style, {
+//     position: 'fixed',
+//     left: `${rect.left}px`,
+//     top: `${rect.top}px`,
+//     width: `${rect.width}px`,
+//     height: `${rect.height}px`,
+//     zIndex: '999999',
+//     pointerEvents: 'none'
+//   });
+//   return overlay;
+// }
+
+// function addOverlay(element, rect, type) {
+//   const overlay = createOverlay(rect, type);
+//   document.body.appendChild(overlay);
+//   if (!state.maskedElements.has(element)) state.maskedElements.set(element, []);
+//   state.maskedElements.get(element).push(overlay);
+//   return overlay;
+// }
+
+// function clearMasksForElement(el) {
+//   (state.maskedElements.get(el) || []).forEach(o => o?.remove());
+//   state.maskedElements.delete(el);
+// }
+
+// function clearAllMasks() {
+//   state.maskedElements.forEach(list => list.forEach(o => o?.remove()));
+//   state.maskedElements.clear();
+//   state.processedNodes = new WeakSet();
+// }
+
+// // build a DOM Range from offsets within `element`
+// function rangeFromOffsets(element, start, end) {
+//   const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null);
+//   let node, pos = 0, r = document.createRange(), gotStart = false;
+//   while ((node = walker.nextNode())) {
+//     const next = pos + node.data.length;
+//     if (!gotStart && start >= pos && start <= next) { r.setStart(node, start - pos); gotStart = true; }
+//     if (gotStart && end >= pos && end <= next) { r.setEnd(node, end - pos); break; }
+//     pos = next;
+//   }
+//   // fallback: if end fell past last node, clamp to end
+//   if (!gotStart) r.setStart(element, 0);
+//   if (r.collapsed) r.setEnd(r.startContainer, r.startOffset);
+//   return r;
+// }
+
+// // initial draw + store findings for re-renders
+// function maskElement(element, piiItems, isTextNode = true) {
+//   if (!isTextNode) {
+//     // image masking unchanged
+//     const rect = element.getBoundingClientRect();
+//     if (rect.width > 0 && rect.height > 0) addOverlay(element, rect, 'image');
+//     return;
+//   }
+//   findingsMap.set(element, piiItems || []);
+//   renderOverlaysFor(element);
+// }
+
+// function renderOverlaysFor(element) {
+//   clearMasksForElement(element);
+//   const items = findingsMap.get(element) || [];
+//   const made = [];
+//   for (const pii of items) {
+//     // USE OFFSETS (start/end) — do NOT use indexOf()
+//     const range = rangeFromOffsets(element, pii.start, pii.end);
+//     for (const rect of range.getClientRects()) {
+//       if (rect.width && rect.height) made.push(addOverlay(element, rect, pii.type));
+//     }
+//   }
+//   if (made.length === 0) findingsMap.delete(element);
+// }
+
+// // re-render overlays on scroll/resize (no whole-line blur)
+// let ticking = false;
+// function refreshVisibleMasks() {
+//   for (const el of findingsMap.keys()) {
+//     if (!document.contains(el)) { clearMasksForElement(el); findingsMap.delete(el); continue; }
+//     renderOverlaysFor(el);
+//   }
+// }
+// const onScrollResize = () => {
+//   if (ticking) return;
+//   ticking = true;
+//   requestAnimationFrame(() => { refreshVisibleMasks(); ticking = false; });
+// };
+// window.addEventListener('scroll', onScrollResize, true);
+// window.addEventListener('resize', onScrollResize);
+
 
 // ========== Masking Functions ==========
 function createOverlay(rect, piiType) {
@@ -356,7 +455,7 @@ async function scanPage() {
         state.processedNodes.add(node);
     }
 
-    scanImages(document);
+    // scanImages(document);
     console.log(`✅ Found and masked ${totalFound} text PII items`);
 
     calculatePrivacyScore();
@@ -417,97 +516,97 @@ function updateBadge(count) {
 }
 
 // ========== Image Moderation ==========
-async function ensureImageAiSession() {
-    if (!window.ai?.assistant?.create) return null;
-    if (!state.sgAiSession) state.sgAiSession = await window.ai.assistant.create();
-    return state.sgAiSession;
-}
+// async function ensureImageAiSession() {
+//     if (!window.ai?.assistant?.create) return null;
+//     if (!state.sgAiSession) state.sgAiSession = await window.ai.assistant.create();
+//     return state.sgAiSession;
+// }
 
-async function fetchImageBlob(url) {
-    try {
-        const res = await fetch(url, { mode: 'cors', cache: 'force-cache' });
-        if (!res.ok) throw new Error(res.statusText);
-        return await res.blob();
-    } catch {
-        return null;
-    }
-}
+// async function fetchImageBlob(url) {
+//     try {
+//         const res = await fetch(url, { mode: 'cors', cache: 'force-cache' });
+//         if (!res.ok) throw new Error(res.statusText);
+//         return await res.blob();
+//     } catch {
+//         return null;
+//     }
+// }
 
-async function sha1Blob(blob) {
-    const buf = await blob.arrayBuffer();
-    const hash = await crypto.subtle.digest('SHA-1', buf);
-    return [...new Uint8Array(hash)].map(b => b.toString(16).padStart(2, '0')).join('');
-}
+// async function sha1Blob(blob) {
+//     const buf = await blob.arrayBuffer();
+//     const hash = await crypto.subtle.digest('SHA-1', buf);
+//     return [...new Uint8Array(hash)].map(b => b.toString(16).padStart(2, '0')).join('');
+// }
 
-async function classifyImageWithAI(blob) {
-    const session = await ensureImageAiSession();
-    if (!session) return { unsafe: null, categories: [], confidence: 0, reason: 'no_ai' };
+// async function classifyImageWithAI(blob) {
+//     const session = await ensureImageAiSession();
+//     if (!session) return { unsafe: null, categories: [], confidence: 0, reason: 'no_ai' };
 
-    const prompt = [
-        { text: "You are a safety classifier. Determine if this image is unsafe for minors (ads, popups, thumbnails)." },
-        { text: 'Return STRICT JSON: {"unsafe": true|false, "categories": ["adult_nudity","explicit","suggestive","violence","graphic","none"], "confidence": 0..1}' },
-        { image: blob }
-    ];
+//     const prompt = [
+//         { text: "You are a safety classifier. Determine if this image is unsafe for minors (ads, popups, thumbnails)." },
+//         { text: 'Return STRICT JSON: {"unsafe": true|false, "categories": ["adult_nudity","explicit","suggestive","violence","graphic","none"], "confidence": 0..1}' },
+//         { image: blob }
+//     ];
 
-    try {
-        const res = await session.prompt(prompt);
-        return JSON.parse(res.trim());
-    } catch (e) {
-        console.warn('Image AI parse error', e);
-        return { unsafe: null, categories: [], confidence: 0, reason: 'parse_error' };
-    }
-}
+//     try {
+//         const res = await session.prompt(prompt);
+//         return JSON.parse(res.trim());
+//     } catch (e) {
+//         console.warn('Image AI parse error', e);
+//         return { unsafe: null, categories: [], confidence: 0, reason: 'parse_error' };
+//     }
+// }
 
-function elementIsVisible(el) {
-    const r = el.getBoundingClientRect();
-    return r.width > CONFIG.MIN_VISIBLE_SIZE && 
-           r.height > CONFIG.MIN_VISIBLE_SIZE && 
-           r.bottom > 0 && 
-           r.right > 0;
-}
+// function elementIsVisible(el) {
+//     const r = el.getBoundingClientRect();
+//     return r.width > CONFIG.MIN_VISIBLE_SIZE && 
+//            r.height > CONFIG.MIN_VISIBLE_SIZE && 
+//            r.bottom > 0 && 
+//            r.right > 0;
+// }
 
-async function processImage(el, isBackground = false) {
-    if (!state.imageModerationEnabled) return;
+// async function processImage(el, isBackground = false) {
+//     if (!state.imageModerationEnabled) return;
     
-    const dataKey = isBackground ? 'sgProcessedBg' : 'sgProcessedImg';
-    if (!el || el.dataset[dataKey] || !elementIsVisible(el)) return;
+//     const dataKey = isBackground ? 'sgProcessedBg' : 'sgProcessedImg';
+//     if (!el || el.dataset[dataKey] || !elementIsVisible(el)) return;
 
-    el.dataset[dataKey] = '1';
+//     el.dataset[dataKey] = '1';
 
-    const url = isBackground 
-        ? getComputedStyle(el).backgroundImage.match(/url\(["']?(.*?)["']?\)/)?.[1]
-        : (el.currentSrc || el.src);
+//     const url = isBackground 
+//         ? getComputedStyle(el).backgroundImage.match(/url\(["']?(.*?)["']?\)/)?.[1]
+//         : (el.currentSrc || el.src);
     
-    if (!url) return;
+//     if (!url) return;
 
-    try {
-        const u = new URL(url, location.href);
-        const fname = u.pathname.toLowerCase();
-        if (fname.endsWith('.svg') || fname.endsWith('.ico')) return;
-    } catch {}
+//     try {
+//         const u = new URL(url, location.href);
+//         const fname = u.pathname.toLowerCase();
+//         if (fname.endsWith('.svg') || fname.endsWith('.ico')) return;
+//     } catch {}
 
-    const blob = await fetchImageBlob(url);
-    if (!blob || blob.size < CONFIG.MIN_IMAGE_SIZE) return;
+//     const blob = await fetchImageBlob(url);
+//     if (!blob || blob.size < CONFIG.MIN_IMAGE_SIZE) return;
 
-    const key = await sha1Blob(blob);
-    let verdict = state.imageVerdictCache.get(key);
+//     const key = await sha1Blob(blob);
+//     let verdict = state.imageVerdictCache.get(key);
 
-    if (!verdict) {
-        verdict = await classifyImageWithAI(blob);
-        state.imageVerdictCache.set(key, verdict);
-    }
+//     if (!verdict) {
+//         verdict = await classifyImageWithAI(blob);
+//         state.imageVerdictCache.set(key, verdict);
+//     }
 
-    if (verdict.unsafe === true && verdict.confidence >= CONFIG.AI_CONFIDENCE_THRESHOLD) {
-        maskElement(el, verdict.categories, false);
-    }
-}
+//     if (verdict.unsafe === true && verdict.confidence >= CONFIG.AI_CONFIDENCE_THRESHOLD) {
+//         maskElement(el, verdict.categories, false);
+//     }
+// }
 
-function scanImages(root = document) {
-    if (!state.imageModerationEnabled) return;
+// function scanImages(root = document) {
+//     if (!state.imageModerationEnabled) return;
     
-    root.querySelectorAll('img').forEach(img => processImage(img, false));
-    root.querySelectorAll('*').forEach(el => processImage(el, true));
-}
+//     root.querySelectorAll('img').forEach(img => processImage(img, false));
+//     root.querySelectorAll('*').forEach(el => processImage(el, true));
+// }
 
 // ========== Observer Setup ==========
 function startObserver() {
